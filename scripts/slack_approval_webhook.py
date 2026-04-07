@@ -16,7 +16,7 @@ import time
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 from approval_listener import process_approval_event
 
@@ -186,12 +186,38 @@ def slack_api_json(token: str, method: str, payload: dict[str, Any]) -> dict[str
     return parsed
 
 
+def slack_api_form(token: str, method: str, payload: dict[str, Any]) -> dict[str, Any]:
+    encoded = parse.urlencode({key: str(value) for key, value in payload.items()}).encode("utf-8")
+    req = request.Request(
+        url=f"https://slack.com/api/{method}",
+        data=encoded,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/x-www-form-urlencoded; charset=utf-8",
+        },
+    )
+    try:
+        with request.urlopen(req, timeout=20) as resp:
+            parsed = json.loads(resp.read().decode("utf-8"))
+    except error.HTTPError as exc:
+        details = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"Slack API {method} failed ({exc.code}): {details}") from exc
+    except error.URLError as exc:
+        raise RuntimeError(f"Slack API network error for {method}: {exc.reason}") from exc
+
+    if not parsed.get("ok"):
+        details = json.dumps(parsed, ensure_ascii=False, sort_keys=True)
+        raise RuntimeError(f"Slack API {method} returned error payload: {details}")
+    return parsed
+
+
 def fetch_thread_root_text(token: str, channel_id: str, thread_ts: str) -> str | None:
     payload = {
         "channel": channel_id,
         "ts": thread_ts,
     }
-    data = slack_api_json(token, "conversations.replies", payload)
+    data = slack_api_form(token, "conversations.replies", payload)
     messages = data.get("messages", [])
     if not isinstance(messages, list) or not messages:
         return None
@@ -363,7 +389,22 @@ class ApprovalEventWorker(threading.Thread):
             },
         }
         args = build_listener_args(self.config)
-        result = process_approval_event(args, listener_payload)
+        try:
+            result = process_approval_event(args, listener_payload)
+        except Exception as exc:  # noqa: BLE001
+            details = str(exc)
+            _log(f"[approval-webhook] worker error: {details}")
+            if "Notion API error 404" in details and "Could not find database" in details:
+                post_thread_reply(
+                    token=self.config.slack_bot_token,
+                    channel_id=channel,
+                    thread_ts=thread_ts,
+                    text=(
+                        "Jeg får ikke tilgang til Notion-databasen enda. "
+                        "Del databasen med integrasjonen som brukes i Render, og prøv igjen."
+                    ),
+                )
+            return
 
         if self.verbose:
             _log(f"[approval-webhook] processed {event_id}: {result.status} ({result.reason})")

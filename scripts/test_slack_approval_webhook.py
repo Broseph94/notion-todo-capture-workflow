@@ -87,7 +87,7 @@ class SlackApprovalWebhookTests(unittest.TestCase):
 
     def test_fetch_thread_root_text(self) -> None:
         with mock.patch(
-            "slack_approval_webhook.slack_api_json",
+            "slack_approval_webhook.slack_api_form",
             return_value={"ok": True, "messages": [{"text": "*Skal jeg legge til disse i Notion?*"}]},
         ) as mocked:
             text = fetch_thread_root_text("xoxb-1", "D123", "1775572800.000100")
@@ -220,6 +220,66 @@ class SlackApprovalWebhookTests(unittest.TestCase):
 
             process_call.assert_called_once()
             post_reply.assert_called_once()
+
+    def test_worker_posts_notion_access_guidance_on_404(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ServiceConfig(
+                slack_bot_token="xoxb-test",
+                slack_signing_secret="secret",
+                pending_suggestions_file=os.path.join(tmp, "pending.json"),
+                cursor_file=os.path.join(tmp, "cursor.json"),
+                confirmation_message_file=os.path.join(tmp, "confirm.txt"),
+                database_id=None,
+                database_name="Oppgaver",
+                notion_token=None,
+                title_property="Oppgave",
+                status_property="Status",
+                due_property="Frist",
+                source_property="Source",
+                client_project_property="Kunde/Prosjekt",
+                type_property="🏷️ Type",
+                priority_property="🔥 Prioritet",
+                status_value="Ikke startet",
+                skip_existing=False,
+                dry_run=False,
+                host="127.0.0.1",
+                port=8787,
+            )
+            worker = ApprovalEventWorker(config=config, verbose=False)
+            payload = {
+                "event_id": "EvNotion404",
+                "event": {
+                    "type": "message",
+                    "text": "JA run-20260407T213815Z-forced-live-test 1",
+                    "channel": "C123",
+                    "ts": "1775572801.000100",
+                    "thread_ts": "1775572800.000100",
+                    "user": "U123",
+                },
+            }
+            error_text = (
+                "Notion API error 404 at /databases/43c652dd...: "
+                '{"code":"object_not_found","message":"Could not find database"}'
+            )
+            with (
+                mock.patch(
+                    "slack_approval_webhook.fetch_thread_root_text",
+                    return_value="*Skal jeg legge til disse i Notion?*",
+                ),
+                mock.patch("slack_approval_webhook.process_approval_event", side_effect=RuntimeError(error_text)),
+                mock.patch("slack_approval_webhook.post_thread_reply") as post_reply,
+            ):
+                worker.handle_event(payload)
+
+            post_reply.assert_called_once_with(
+                token="xoxb-test",
+                channel_id="C123",
+                thread_ts="1775572800.000100",
+                text=(
+                    "Jeg får ikke tilgang til Notion-databasen enda. "
+                    "Del databasen med integrasjonen som brukes i Render, og prøv igjen."
+                ),
+            )
 
     def test_worker_posts_feedback_when_ignored_due_to_resolved_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
