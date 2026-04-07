@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.wal.notion-approval-webhook</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/opt/homebrew/bin/python3</string>
+      <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/scripts/slack_approval_webhook.py</string>
+      <string>--host</string>
+      <string>0.0.0.0</string>
+      <string>--port</string>
+      <string>8787</string>
+      <string>--pending-suggestions-file</string>
+      <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/state/pending_suggestions.json</string>
+      <string>--cursor-file</string>
+      <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/state/approval_cursor.json</string>
+      <string>--confirmation-message-file</string>
+      <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/state/approval_confirmation_live.txt</string>
+    </array>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>SLACK_BOT_TOKEN</key>
+      <string>REPLACE_ME</string>
+      <key>SLACK_SIGNING_SECRET</key>
+      <string>REPLACE_ME</string>
+      <key>NOTION_API_TOKEN</key>
+      <string>REPLACE_ME_OPTIONAL</string>
+      <key>NOTION_DATABASE_ID</key>
+      <string>REPLACE_ME_OPTIONAL</string>
+    </dict>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/state/approval_webhook.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/jacobskogli/Desktop/work-ops-automations/notion-todo-capture/state/approval_webhook.err.log</string>
+  </dict>
+</plist>

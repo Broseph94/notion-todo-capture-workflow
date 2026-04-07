@@ -1,0 +1,4 @@
+interface:
+  display_name: "Notion Todo Capture"
+  short_description: "Gjør fritekst og møtenotater om til TODOs i Notion."
+  default_prompt: "Konverter tekst til oppgaver med frister og opprett dem direkte i Notion-databasen (ikke dry-run med mindre bruker ber om det)."
