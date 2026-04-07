@@ -281,7 +281,7 @@ class SlackApprovalWebhookTests(unittest.TestCase):
                 ),
             )
 
-    def test_worker_posts_feedback_when_ignored_due_to_resolved_thread(self) -> None:
+    def test_worker_skips_thread_reply_for_ignored_event(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config = ServiceConfig(
                 slack_bot_token="xoxb-test",
@@ -332,12 +332,7 @@ class SlackApprovalWebhookTests(unittest.TestCase):
             ):
                 worker.handle_event(payload)
 
-            post_reply.assert_called_once_with(
-                token="xoxb-test",
-                channel_id="D123",
-                thread_ts="1775572800.000100",
-                text="Denne tråden er allerede behandlet, så jeg legger ikke til noe nytt i Notion-databasen.",
-            )
+            post_reply.assert_not_called()
 
     def test_build_ignored_feedback_none_for_generic_reason(self) -> None:
         self.assertIsNone(build_ignored_feedback("not a thread decision candidate"))

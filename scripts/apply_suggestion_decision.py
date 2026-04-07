@@ -324,9 +324,7 @@ def build_confirmation_message(
         if dry_run:
             return f"Ok, i en test ville jeg lagt til {noun(len(approved))} i Notion-databasen."
         else:
-            head = f"Ok, jeg legger {noun(len(approved))} til i Notion-databasen."
-            details = f"Opprettet: {created}, oppdatert: {updated}, hoppet over: {skipped}."
-            return "\n".join([head, details])
+            return f"Ok, jeg legger {noun(len(approved))} til i Notion-databasen."
     else:
         return f"Ok, jeg legger ikke til {noun(len(rejected))} i Notion-databasen."
 

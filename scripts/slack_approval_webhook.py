@@ -305,11 +305,8 @@ def build_listener_args(config: ServiceConfig) -> argparse.Namespace:
 
 
 def build_ignored_feedback(reason: str) -> str | None:
-    normalized = (reason or "").strip().casefold()
-    if normalized == "no pending suggestions matched decision":
-        return "Denne tråden er allerede behandlet, så jeg legger ikke til noe nytt i Notion-databasen."
-    if normalized == "thread reply did not match any pending approval prompt":
-        return "Jeg fant ingen aktiv pending oppgave i denne tråden ennå."
+    # Keep thread replies clean: we do not post automatic feedback on ignored events.
+    # Ignored reasons remain available in logs for troubleshooting.
     return None
 
 
