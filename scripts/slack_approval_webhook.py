@@ -188,8 +188,7 @@ def slack_api_json(token: str, method: str, payload: dict[str, Any]) -> dict[str
 def fetch_thread_root_text(token: str, channel_id: str, thread_ts: str) -> str | None:
     payload = {
         "channel": channel_id,
-        "oldest": thread_ts,
-        "latest": thread_ts,
+        "ts": thread_ts,
         "inclusive": True,
         "limit": 1,
     }
