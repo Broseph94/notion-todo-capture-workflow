@@ -160,6 +160,67 @@ class SlackApprovalWebhookTests(unittest.TestCase):
                 text="Ok, jeg legger denne til i Notion-databasen.",
             )
 
+    def test_worker_continues_when_root_fetch_fails(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ServiceConfig(
+                slack_bot_token="xoxb-test",
+                slack_signing_secret="secret",
+                pending_suggestions_file=os.path.join(tmp, "pending.json"),
+                cursor_file=os.path.join(tmp, "cursor.json"),
+                confirmation_message_file=os.path.join(tmp, "confirm.txt"),
+                database_id=None,
+                database_name="Oppgaver",
+                notion_token=None,
+                title_property="Oppgave",
+                status_property="Status",
+                due_property="Frist",
+                source_property="Source",
+                client_project_property="Kunde/Prosjekt",
+                type_property="🏷️ Type",
+                priority_property="🔥 Prioritet",
+                status_value="Ikke startet",
+                skip_existing=False,
+                dry_run=True,
+                host="127.0.0.1",
+                port=8787,
+            )
+            worker = ApprovalEventWorker(config=config, verbose=False)
+            payload = {
+                "event_id": "EvRootFail",
+                "event": {
+                    "type": "message",
+                    "text": "JA run-20260407T213815Z-forced-live-test 1",
+                    "channel": "C123",
+                    "ts": "1775572801.000100",
+                    "thread_ts": "1775572800.000100",
+                    "user": "U123",
+                },
+            }
+            result = ListenerResult(
+                status="processed",
+                reason="decision applied",
+                run_id="run-20260407T213815Z-forced-live-test",
+                approved_count=1,
+                rejected_count=0,
+                created=1,
+                updated=0,
+                skipped=0,
+                pending_remaining=0,
+                confirmation_message="Ok, jeg legger denne til i Notion-databasen.",
+            )
+            with (
+                mock.patch(
+                    "slack_approval_webhook.fetch_thread_root_text",
+                    side_effect=RuntimeError("Slack API conversations.replies returned error payload: invalid_arguments"),
+                ),
+                mock.patch("slack_approval_webhook.process_approval_event", return_value=result) as process_call,
+                mock.patch("slack_approval_webhook.post_thread_reply") as post_reply,
+            ):
+                worker.handle_event(payload)
+
+            process_call.assert_called_once()
+            post_reply.assert_called_once()
+
     def test_worker_posts_feedback_when_ignored_due_to_resolved_thread(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             config = ServiceConfig(

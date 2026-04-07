@@ -181,7 +181,8 @@ def slack_api_json(token: str, method: str, payload: dict[str, Any]) -> dict[str
         raise RuntimeError(f"Slack API network error for {method}: {exc.reason}") from exc
 
     if not parsed.get("ok"):
-        raise RuntimeError(f"Slack API {method} returned error: {parsed.get('error')}")
+        details = json.dumps(parsed, ensure_ascii=False, sort_keys=True)
+        raise RuntimeError(f"Slack API {method} returned error payload: {details}")
     return parsed
 
 
@@ -189,8 +190,6 @@ def fetch_thread_root_text(token: str, channel_id: str, thread_ts: str) -> str |
     payload = {
         "channel": channel_id,
         "ts": thread_ts,
-        "inclusive": True,
-        "limit": 1,
     }
     data = slack_api_json(token, "conversations.replies", payload)
     messages = data.get("messages", [])
@@ -344,7 +343,14 @@ class ApprovalEventWorker(threading.Thread):
         if not channel or not thread_ts or not ts or not text:
             return
 
-        root_text = fetch_thread_root_text(self.config.slack_bot_token, channel, thread_ts)
+        root_text: str | None = None
+        try:
+            root_text = fetch_thread_root_text(self.config.slack_bot_token, channel, thread_ts)
+        except Exception as exc:  # noqa: BLE001
+            # Do not block decision processing if thread-root lookup fails.
+            # Explicit run-id replies can still be processed without root text.
+            _log(f"[approval-webhook] root fetch failed channel={channel} thread_ts={thread_ts}: {exc}")
+
         listener_payload = {
             "event_id": event_id,
             "event": {
