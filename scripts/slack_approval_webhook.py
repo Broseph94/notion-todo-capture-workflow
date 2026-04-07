@@ -276,6 +276,15 @@ def build_listener_args(config: ServiceConfig) -> argparse.Namespace:
     )
 
 
+def build_ignored_feedback(reason: str) -> str | None:
+    normalized = (reason or "").strip().casefold()
+    if normalized == "no pending suggestions matched decision":
+        return "Denne tråden er allerede behandlet, så jeg legger ikke til noe nytt i Notion-databasen."
+    if normalized == "thread reply did not match any pending approval prompt":
+        return "Jeg fant ingen aktiv pending oppgave i denne tråden ennå."
+    return None
+
+
 class ApprovalEventWorker(threading.Thread):
     def __init__(self, config: ServiceConfig, verbose: bool = False) -> None:
         super().__init__(daemon=True)
@@ -346,6 +355,17 @@ class ApprovalEventWorker(threading.Thread):
                 thread_ts=thread_ts,
                 text=result.confirmation_message,
             )
+            return
+
+        if result.status == "ignored":
+            feedback = build_ignored_feedback(result.reason)
+            if feedback:
+                post_thread_reply(
+                    token=self.config.slack_bot_token,
+                    channel_id=channel,
+                    thread_ts=thread_ts,
+                    text=feedback,
+                )
 
 
 def make_handler(worker: ApprovalEventWorker, config: ServiceConfig):

@@ -20,6 +20,7 @@ from slack_approval_webhook import (
     ApprovalEventWorker,
     ServiceConfig,
     apply_state_sync,
+    build_ignored_feedback,
     fetch_thread_root_text,
     should_process_event,
     verify_slack_signature,
@@ -158,6 +159,67 @@ class SlackApprovalWebhookTests(unittest.TestCase):
                 thread_ts="1775572800.000100",
                 text="Ok, jeg legger denne til i Notion-databasen.",
             )
+
+    def test_worker_posts_feedback_when_ignored_due_to_resolved_thread(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config = ServiceConfig(
+                slack_bot_token="xoxb-test",
+                slack_signing_secret="secret",
+                pending_suggestions_file=os.path.join(tmp, "pending.json"),
+                cursor_file=os.path.join(tmp, "cursor.json"),
+                confirmation_message_file=os.path.join(tmp, "confirm.txt"),
+                database_id=None,
+                database_name="Oppgaver",
+                notion_token=None,
+                title_property="Oppgave",
+                status_property="Status",
+                due_property="Frist",
+                source_property="Source",
+                client_project_property="Kunde/Prosjekt",
+                type_property="🏷️ Type",
+                priority_property="🔥 Prioritet",
+                status_value="Ikke startet",
+                skip_existing=False,
+                dry_run=True,
+                host="127.0.0.1",
+                port=8787,
+            )
+            worker = ApprovalEventWorker(config=config, verbose=False)
+            payload = {
+                "event_id": "EvIgnored",
+                "event": {
+                    "type": "message",
+                    "text": "Ja, legg til denne",
+                    "channel": "D123",
+                    "ts": "1775572801.000100",
+                    "thread_ts": "1775572800.000100",
+                    "user": "U123",
+                },
+            }
+            result = ListenerResult(
+                status="ignored",
+                reason="no pending suggestions matched decision",
+                run_id="run-1",
+            )
+            with (
+                mock.patch(
+                    "slack_approval_webhook.fetch_thread_root_text",
+                    return_value="*Skal jeg legge til disse i Notion?*",
+                ),
+                mock.patch("slack_approval_webhook.process_approval_event", return_value=result),
+                mock.patch("slack_approval_webhook.post_thread_reply") as post_reply,
+            ):
+                worker.handle_event(payload)
+
+            post_reply.assert_called_once_with(
+                token="xoxb-test",
+                channel_id="D123",
+                thread_ts="1775572800.000100",
+                text="Denne tråden er allerede behandlet, så jeg legger ikke til noe nytt i Notion-databasen.",
+            )
+
+    def test_build_ignored_feedback_none_for_generic_reason(self) -> None:
+        self.assertIsNone(build_ignored_feedback("not a thread decision candidate"))
 
     def test_apply_state_sync_writes_pending_and_cursor(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
