@@ -21,6 +21,10 @@ from urllib import error, request
 from approval_listener import process_approval_event
 
 
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
 @dataclasses.dataclass
 class ServiceConfig:
     slack_bot_token: str
@@ -309,7 +313,7 @@ class ApprovalEventWorker(threading.Thread):
             try:
                 self.handle_event(item)
             except Exception as exc:  # noqa: BLE001
-                print(f"[approval-webhook] worker error: {exc}")
+                _log(f"[approval-webhook] worker error: {exc}")
             finally:
                 self.queue.task_done()
 
@@ -317,7 +321,7 @@ class ApprovalEventWorker(threading.Thread):
         event = body.get("event")
         if not isinstance(event, dict):
             if self.verbose:
-                print("[approval-webhook] ignored payload without event object")
+                _log("[approval-webhook] ignored payload without event object")
             return
         if not should_process_event(event):
             if self.verbose:
@@ -325,7 +329,7 @@ class ApprovalEventWorker(threading.Thread):
                 subtype = str(event.get("subtype", ""))
                 ts = str(event.get("ts", ""))
                 thread_ts = str(event.get("thread_ts", ""))
-                print(
+                _log(
                     "[approval-webhook] ignored event before processing: "
                     f"type={event_type} subtype={subtype} ts={ts} thread_ts={thread_ts}"
                 )
@@ -357,7 +361,7 @@ class ApprovalEventWorker(threading.Thread):
         result = process_approval_event(args, listener_payload)
 
         if self.verbose:
-            print(f"[approval-webhook] processed {event_id}: {result.status} ({result.reason})")
+            _log(f"[approval-webhook] processed {event_id}: {result.status} ({result.reason})")
 
         if result.status == "processed" and result.confirmation_message:
             post_thread_reply(
@@ -432,7 +436,7 @@ def make_handler(worker: ApprovalEventWorker, config: ServiceConfig):
             length = int(self.headers.get("Content-Length", "0"))
             body = self.rfile.read(length)
             if worker.verbose:
-                print(f"[approval-webhook] incoming request path=/slack/events bytes={length}")
+                _log(f"[approval-webhook] incoming request path=/slack/events bytes={length}")
 
             timestamp = self.headers.get("X-Slack-Request-Timestamp")
             signature = self.headers.get("X-Slack-Signature")
@@ -444,7 +448,7 @@ def make_handler(worker: ApprovalEventWorker, config: ServiceConfig):
                 max_age_seconds=config.max_age_seconds,
             ):
                 if worker.verbose:
-                    print("[approval-webhook] rejected request: invalid signature")
+                    _log("[approval-webhook] rejected request: invalid signature")
                 self._write_json(HTTPStatus.UNAUTHORIZED, {"ok": False, "error": "invalid_signature"})
                 return
 
@@ -452,14 +456,14 @@ def make_handler(worker: ApprovalEventWorker, config: ServiceConfig):
                 payload = json.loads(body.decode("utf-8"))
             except json.JSONDecodeError:
                 if worker.verbose:
-                    print("[approval-webhook] rejected request: invalid json")
+                    _log("[approval-webhook] rejected request: invalid json")
                 self._write_json(HTTPStatus.BAD_REQUEST, {"ok": False, "error": "invalid_json"})
                 return
 
             if payload.get("type") == "url_verification":
                 challenge = payload.get("challenge")
                 if worker.verbose:
-                    print("[approval-webhook] handled url_verification challenge")
+                    _log("[approval-webhook] handled url_verification challenge")
                 self._write_json(HTTPStatus.OK, {"challenge": challenge})
                 return
 
@@ -468,7 +472,7 @@ def make_handler(worker: ApprovalEventWorker, config: ServiceConfig):
                 ptype = str(payload.get("type", ""))
                 event = payload.get("event", {})
                 etype = str(event.get("type", "")) if isinstance(event, dict) else ""
-                print(f"[approval-webhook] queued payload type={ptype} event.type={etype}")
+                _log(f"[approval-webhook] queued payload type={ptype} event.type={etype}")
             self._write_json(HTTPStatus.OK, {"ok": True})
 
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
@@ -493,7 +497,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, shutdown_handler)
     signal.signal(signal.SIGTERM, shutdown_handler)
 
-    print(f"[approval-webhook] listening on {config.host}:{config.port}")
+    _log(f"[approval-webhook] listening on {config.host}:{config.port}")
     try:
         server.serve_forever()
     finally:
